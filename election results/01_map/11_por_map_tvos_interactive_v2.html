@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"
+	integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+	crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+	<script src="https://d3js.org/d3.v5.min.js"></script>
+	<style>
+	.custom-popup, .leaflet-popup-content-wrapper {
+		opacity: 0.85
+	}
+	
+	.custom-popup, .leaflet-popup-tip {
+		background: transparent;
+		border: none;
+		box-shadow: none;
+	}
+	
+	.zel {
+		color: green;
+		font-weight: bold;
+	}
+	
+	.por {
+		color: red;
+		font-weight: bold;
+	}
+	</style>
+</head>
+<body>
+	<div id="map" style="width: 1000px; height: 666px;"></div>
+	<script>
+		function getColor(d) {
+			var colorscale = d3.scaleLinear()
+			  .domain([0, d.properties.pos_max])
+			  .range(['#ffffff', '#c2443e']);
+			por_growth = d.properties.por_growth
+			if (por_growth==9999) {
+				return '#939393'
+			} else {
+				return colorscale(por_growth)
+			}
+		};
+		
+		function getTooltipText(data) {
+			var f = d3.format(",.1%")
+			delta = f(Math.abs(data.por_growth))
+			dist_name = '<b>' + data.name.split("<br>")[0].split(",")[1]
+			dist_centre = data.name.split("<br>")[1].split("</b>")[1]
+			if (data.winner == 'zel') {
+				winner = "<b class='zel'>Зеленський</b>"
+			} else {
+				winner = "<b class='por'>Порошенко</b>"
+			}
+			if (data.por_growth>1) {
+				return "Вибори не <br> проводились"
+			} else if (data.por_growth>0) {
+				return dist_name + '<br>' + dist_centre + '<br>' + "Підтримка <b class='por'>Порошенка</b> зросла на <b>" + delta + "</b>" + '<br>На цьому окрузі переміг ' + winner
+			} else if (data.por_growth<0) {
+				return dist_name + '<br>' + dist_centre + '<br>' + "Підтримка <b class='por'>Порошенка</b> впала на <b>" + delta + "</b>" + '<br>На цьому окрузі переміг ' + winner
+			}
+		};
+		
+		function style(feature) {
+			return {
+				weight: 0.4,
+				opacity: 1,
+				color: 'gray',
+				fillOpacity: 0.7,
+				fillColor: getColor(feature)
+			};
+		};
+		
+		function stylePopup(popup) {
+			return {fillOpacity: 0.7}
+		}
+		
+		function highlightFeature(e) {
+			selection = e.target
+			selection.setStyle({
+				weight: 1,
+				color: '#666',
+				dashArray: '',
+				fillOpacity: 0.7
+			});
+			
+			props = selection.feature.properties
+			var popup = L.popup({closeButton:false,className: "custom-popup",autoPan:false})
+				.setLatLng(e.latlng)
+				.setContent(getTooltipText(props))
+				.openOn(map)
+		};
+		
+		var geojson;
+		
+		function resetHighlight(e){
+			geojson.resetStyle(e.target);
+			map.closePopup();
+		};
+
+		function onEachFeature(feature, layer) {
+			layer.on({
+				mouseover: highlightFeature,
+				mouseout: resetHighlight
+			});
+		};
+		
+		var map = L.map('map',{
+					minZoom: 6,
+					maxZoom: 10
+				})
+				.setView([48.5, 31.1], 6);
+		
+		var bounds = map.getBounds();
+		map.setMaxBounds(bounds);
+        
+         L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+            attribution: ' <a href="http://osm.org/copyright">OpenStreetMap</a>',
+			id: 'mapbox.light'
+         }).addTo(map);
+		
+		d3.json("tvos_all_v6.json").then(function(districts) {
+		 var positives = [];
+		 
+		 for (i=0;i<districts.features.length;i++){
+			if (districts.features[i].properties.por_growth!=9999) {
+				if (districts.features[i].properties.por_growth>=0) {
+					positives.push(districts.features[i].properties.por_growth)
+				}
+			};
+		 };
+		 
+		 var positives_max = d3.max(positives)
+		
+		 for (i=0;i<districts.features.length;i++){
+			districts.features[i].properties.pos_max = positives_max
+		 }
+		 
+		 geojson = L.geoJson(districts, {
+			style: style,
+			onEachFeature: onEachFeature
+			}).addTo(map);
+		 
+		});
+	</script>
+</body>
